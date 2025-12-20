@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import seaborn as sns
 from sklearn.base import clone
-from sklearn.cluster import KMeans, HDBSCAN, DBSCAN, AgglomerativeClustering
+from sklearn.cluster import KMeans, HDBSCAN, DBSCAN, AgglomerativeClustering, MeanShift, estimate_bandwidth
 from sklearn.metrics import silhouette_score, silhouette_samples
 
 #Clustering metrics (SS, SSB, SSW, R2)
@@ -187,3 +187,22 @@ def visualize_silhouette_graf(df, range_clusters=[2, 3, 4, 5, 6]):
 
     plt.tight_layout()
     plt.show()
+
+def get_meanshift(df, features):
+    # quantiles to test
+    quantiles = [0.25, 0.2, 0.15, 0.1, 0.08, 0.06]
+
+    for q in quantiles:
+        bw = estimate_bandwidth(df[features], quantile=q, n_samples=500, random_state=42)
+        
+        if bw < 0.01: continue 
+        
+        ms = MeanShift(bandwidth=bw, bin_seeding=True, n_jobs=-1)
+        labels = ms.fit_predict(df[features])
+        n_clusters = len(np.unique(labels))
+
+        # if the result is valid (between 2 and 15 clusters)
+        if 2 <= n_clusters <= 15:
+            print(f"Used quantile {q} -> {n_clusters} clusters found.")
+            return labels
+    return labels
