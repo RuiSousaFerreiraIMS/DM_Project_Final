@@ -5,8 +5,9 @@ import matplotlib.cm as cm
 import seaborn as sns
 from sklearn.base import clone
 from sklearn.cluster import KMeans, HDBSCAN, DBSCAN, AgglomerativeClustering, MeanShift, estimate_bandwidth
-from sklearn.metrics import silhouette_score, silhouette_samples
+from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score, silhouette_samples
 from sklearn.neighbors import NearestNeighbors
+from sklearn.mixture import GaussianMixture
 
 #Clustering metrics (SS, SSB, SSW, R2)
 
@@ -322,3 +323,158 @@ def get_meanshift(df, features):
             print(f"Used quantile {q} -> {n_clusters} clusters found.")
             return labels
     return labels
+
+def get_n_components(df, features, cov_types=("diag", "full")):
+    """
+    Determine the optimal number of components for Gaussian Mixture Models
+    using the Akaike Information Criterion (AIC) and Bayesian Information Criterion (BIC).
+    """
+    n_components = range(1, 21)
+
+    for cov in cov_types:
+        bic_values = []
+        aic_values = []
+
+        for k in n_components:
+            model = GaussianMixture(
+                n_components=k,
+                covariance_type=cov,
+                n_init=3,
+                random_state=1
+            ).fit(df[features])
+
+            bic_values.append(model.bic(df[features]))
+            aic_values.append(model.aic(df[features]))
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(n_components, bic_values, "o-", label="BIC")
+        plt.plot(n_components, aic_values, "s-", label="AIC")
+        plt.xlabel("n_components")
+        plt.ylabel("Criterion value")
+        plt.title(f"GMM model selection ({cov} covariance)")
+        plt.xticks(list(n_components))
+        plt.legend()
+        plt.show()
+
+
+def fit_gmm_segmentation(df, features, k, cov_type='full', rsq_func=None):
+    """
+    Fits a GMM model, assigns labels to the dataframe, and calculates R2 if a function is provided.
+    
+    Parameters:
+    - df: The input dataframe
+    - features: List of column names to use for clustering
+    - k: Number of components 
+    - cov_type: Covariance type (default 'full')
+    - rsq_func: (Optional) Your custom get_rsq function
+    
+    Returns:
+    - gmm_model: The fitted model object
+    - df_result: Dataframe with a new 'gmm_labels' column
+    """
+    # 1. Initialize and Fit
+    gmm = GaussianMixture(n_components=k, covariance_type=cov_type, 
+                          n_init=10, init_params='kmeans', random_state=1)
+    
+    # 2. Predict Labels
+    labels = gmm.fit_predict(df[features])
+    
+    # 3. Create Result Dataframe
+    df_result = df.copy()
+    df_result['gmm_labels'] = labels
+    
+    # 4. Calculate R^2 
+    r2 = rsq_func(df_result, features, 'gmm_labels')
+    print(f"GMM ({cov_type}, k={k}) R² score: {r2:.4f}")
+    
+    # Print cluster distribution
+    print("\nCluster Sizes:")
+    print(df_result['gmm_labels'].value_counts().sort_index())
+    
+    return gmm, df_result
+
+def analyze_gmm_uncertainty(model, df, features, threshold):
+    """
+    Calculates assignment probabilities and plots the uncertainty distribution.
+    
+    Parameters:
+    - model: The fitted GMM model
+    - df: The dataframe containing the data
+    - features: List of feature columns used for the model
+    - threshold: Probability cutoff for 'certain' customers 
+    """
+    # 1. Get Probabilities
+    probabilities = model.predict_proba(df[features])
+    max_probs = probabilities.max(axis=1)
+    
+    # 2. Filter Certain vs Uncertain
+    certain_mask = max_probs >= threshold
+    uncertain_mask = ~certain_mask
+    
+    n_certain = certain_mask.sum()
+    n_uncertain = uncertain_mask.sum()
+    
+    # 3. Print Statistics
+    print(f"\n--- GMM Probability Analysis ---")
+    print(f"Threshold: {threshold:.0%}")
+    print(f"Clear assignments: {n_certain:,} customers")
+    print(f"Uncertain assignments: {n_uncertain:,} customers ({n_uncertain/len(df):.1%})")
+    
+    # 4. Plot Distribution
+    plt.figure(figsize=(10, 6))
+    plt.hist(max_probs, bins=50, edgecolor='black', alpha=0.7, color='#4c72b0')
+    plt.axvline(x=threshold, color='red', linestyle='--', linewidth=2, 
+                label=f'Uncertainty threshold ({threshold})')
+    
+    plt.xlabel('Maximum Probability (Confidence)', fontsize=12)
+    plt.ylabel('Number of Customers', fontsize=12)
+    plt.title('Distribution of Segment Assignment Confidence', fontsize=14)
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.show()
+
+
+def get_model_metrics(df, labels, model_name, perspective):
+    """
+    Calculates clustering metrics and returns them as a dictionary.
+    
+    Parameters:
+    - df: The dataframe with features used for clustering.
+    - labels: The cluster labels output by the model.
+    - model_name: String name of the model (e.g., 'K-Means k=5').
+    - perspective: String name of the perspective (e.g., 'Value', 'Behavioral').
+    
+    Returns:
+    - dict: A dictionary containing the metrics.
+    """
+    
+    # Filter out noise (-1) if using DBSCAN/HDBSCAN for cleaner metrics (optional)
+    # If you want to include noise in the score, comment these 3 lines out:
+    mask = labels != -1
+    if mask.sum() < len(df) and mask.sum() > 0:
+        X_metrics = df[mask]
+        labels_metrics = labels[mask]
+    else:
+        X_metrics = df
+        labels_metrics = labels
+
+    # Calculate Number of Clusters (excluding noise -1)
+    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+    
+    if n_clusters < 2:
+        print(f"Skipping {model_name}: Less than 2 clusters found.")
+        return None
+
+    # Calculate Scores
+    sil = silhouette_score(X_metrics, labels_metrics)
+    db = davies_bouldin_score(X_metrics, labels_metrics)
+    ch = calinski_harabasz_score(X_metrics, labels_metrics)
+    
+    return {
+        'Perspective': perspective,
+        'Model Name': model_name,
+        'Num_Clusters': n_clusters,
+        'Silhouette Score': round(sil, 3),        # Higher is better
+        'Davies-Bouldin': round(db, 3),           # Lower is better
+        'Calinski-Harabasz': round(ch, 1)         # Higher is better
+    }
