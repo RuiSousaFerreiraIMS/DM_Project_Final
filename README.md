@@ -1,9 +1,8 @@
 # TODO - entrega final dia 3 jan
 
 ## Component 1: Jupyter Notebook (5 points) ATÉ DIA 25 DEZ
-- rever soms para cada perspetiva (BRUNA)
 - meter grafico das tabelas R^2 e ver do tuning para cada perspetiva (ALEX)
-- refazer conclusoes das tecnicas de clustering: soms e mean shift (BRUNA),  gaussian (ALEX)
+- refazer conclusoes das tecnicas de clustering:  gaussian (ALEX)
 - rever merge dos clusters (TODOS)
 - rever profiling (TODOS)
 - UMAP, melhorar t-SNE (RUI)
