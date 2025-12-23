@@ -457,32 +457,40 @@ def get_model_metrics(df, labels, model_name, perspective):
     - dict: A dictionary containing the metrics.
     """
     
-    # Filter out noise (-1) if using DBSCAN/HDBSCAN for cleaner metrics (optional)
-    # If you want to include noise in the score, comment these 3 lines out:
+    # 1. Handle Noise (DBSCAN/HDBSCAN)
+    # We filter out noise (-1) so metrics represent the validity of actual clusters
     mask = labels != -1
     if mask.sum() < len(df) and mask.sum() > 0:
-        X_metrics = df[mask]
+        X_metrics = df[mask].copy()
         labels_metrics = labels[mask]
     else:
-        X_metrics = df
+        X_metrics = df.copy()
         labels_metrics = labels
 
-    # Calculate Number of Clusters (excluding noise -1)
-    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-    
+    # Check for valid number of clusters
+    n_clusters = len(set(labels_metrics))
     if n_clusters < 2:
         print(f"Skipping {model_name}: Less than 2 clusters found.")
         return None
 
-    # Calculate Scores
+    # 2. Calculate Standard Scikit-Learn Metrics
     sil = silhouette_score(X_metrics, labels_metrics)
     db = davies_bouldin_score(X_metrics, labels_metrics)
     ch = calinski_harabasz_score(X_metrics, labels_metrics)
+    
+    # 3. Calculate R^2 
+    # We use your existing get_rsq function. 
+    # We must attach labels temporarily because get_rsq expects a column name.
+    X_metrics['temp_labels'] = labels_metrics
+    features = [c for c in X_metrics.columns if c != 'temp_labels']
+    
+    r2 = get_rsq(X_metrics, features, 'temp_labels')
     
     return {
         'Perspective': perspective,
         'Model Name': model_name,
         'Num_Clusters': n_clusters,
+        'R2 Score': round(r2, 4),
         'Silhouette Score': round(sil, 3),        # Higher is better
         'Davies-Bouldin': round(db, 3),           # Lower is better
         'Calinski-Harabasz': round(ch, 1)         # Higher is better
@@ -540,8 +548,6 @@ def plot_hexagons(som_matrix, som, ax, label='', cmap=None):
         plt.colorbar(sm, cax=cax)
     else:
         cax.axis('off')
-
-    return ax
 
     return ax
 
@@ -631,7 +637,7 @@ def run_som_kmeans(som, data_values, n_clusters=4):
     return final_labels
 
 
-def run_som_hierarchical(som, n_clusters=5, cmap=cm.Spectral_r, figsize=(20, 8)):
+def run_som_hierarchical(som, data_values, n_clusters=5, cmap=cm.Spectral_r, figsize=(20, 8)):
     """
     Executa o clustering hierárquico nos pesos do SOM e mostra
     o Dendrograma e o Mapa resultante lado a lado.
@@ -698,6 +704,14 @@ def run_som_hierarchical(som, n_clusters=5, cmap=cm.Spectral_r, figsize=(20, 8))
     
     plt.tight_layout()
     plt.show()
+
+    final_labels = []
+    for x in data_values:
+        w = som.winner(x)
+        cluster_label = matrix_hc[w[0], w[1]]
+        final_labels.append(cluster_label)
+        
+    return final_labels
 
 
 
