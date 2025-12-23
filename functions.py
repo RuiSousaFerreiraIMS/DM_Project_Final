@@ -9,6 +9,7 @@ from scipy.stats import skew, kurtosis
 from sklearn.base import clone
 from matplotlib.patches import RegularPolygon
 from sklearn.cluster import KMeans, HDBSCAN, DBSCAN, AgglomerativeClustering, MeanShift, estimate_bandwidth
+from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score, silhouette_samples
 from sklearn.neighbors import NearestNeighbors
 from sklearn.mixture import GaussianMixture
@@ -780,3 +781,201 @@ def calculate_trend(df):
 
     trends = df_sorted.groupby('Loyalty#')['NumFlights'].apply(get_slope).reset_index(name='Flight_Trend_Slope')
     return trends
+
+def plot_pca_variance(data,features,chosen_components=2,
+                      threshold=0.80,figsize=(10, 5),random_state=42
+                      ):
+    """
+    Plots individual and cumulative explained variance for PCA.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Dataset containing the features.
+    features : list
+        List of feature names to use in PCA.
+    chosen_components : int, default=2
+        Number of principal components highlighted.
+    threshold : float, default=0.80
+        Variance threshold to show (e.g. 0.80 = 80%).
+    figsize : tuple, default=(10, 5)
+        Size of the matplotlib figure.
+    random_state : int, default=42
+        Random state for PCA reproducibility.
+    """
+
+    # Fit PCA with all components
+    pca_full = PCA(n_components=len(features), random_state=random_state)
+    pca_full.fit(data[features])
+
+    explained_variance = pca_full.explained_variance_ratio_
+    cumulative_variance = np.cumsum(explained_variance)
+
+    # Create plot
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Individual variance
+    ax.bar(
+        range(1, len(features) + 1),
+        explained_variance,
+        alpha=0.6,
+        label='Individual variance'
+    )
+
+    # Cumulative variance
+    ax.plot(
+        range(1, len(features) + 1),
+        cumulative_variance,
+        marker='o',
+        linewidth=2,
+        label='Cumulative variance'
+    )
+
+    # Threshold line
+    ax.axhline(
+        y=threshold,
+        linestyle='--',
+        linewidth=1.5,
+        label=f'{int(threshold*100)}% threshold'
+    )
+
+    # Highlight chosen components
+    chosen_var = cumulative_variance[chosen_components - 1]
+    ax.axvline(
+        x=chosen_components,
+        linestyle=':',
+        linewidth=2,
+        label=f'Chosen ({chosen_components} PCs)'
+    )
+    ax.scatter(
+        chosen_components,
+        chosen_var,
+        s=180,
+        marker='*',
+        zorder=10
+    )
+    ax.text(
+        chosen_components + 0.15,
+        chosen_var - 0.12,
+        f'{chosen_var:.1%}\n({chosen_components} PCs)',
+        fontsize=10,
+        weight='bold'
+    )
+
+    # Formatting
+    ax.set_xlabel('Number of Principal Components')
+    ax.set_ylabel('Variance Explained')
+    ax.set_title('PCA – Variance Explained')
+    ax.set_xticks(range(1, len(features) + 1))
+    ax.set_ylim(0, 1.05)
+    ax.yaxis.set_major_formatter(
+        plt.FuncFormatter(lambda y, _: f'{y:.0%}')
+    )
+    ax.grid(alpha=0.3)
+    ax.legend(loc='center right')
+
+    plt.tight_layout()
+    plt.show()
+
+    # Print summary
+    print(f"\n{'='*60}")
+    print("Variance Explained by Each Component")
+    print(f"{'='*60}")
+    for i, (var, cum_var) in enumerate(zip(explained_variance, cumulative_variance)):
+        print(f"  PC{i+1}: {var:6.1%} | Cumulative: {cum_var:6.1%}")
+    print(f"{'='*60}")
+    print(
+        f"\n{chosen_components} components capture "
+        f"{chosen_var:.1%} of variance"
+    )
+    print(
+        f"Trade-off: Simplicity vs. Information loss "
+        f"({1 - chosen_var:.1%})"
+    )
+
+
+
+def plot_pca_clusters(df,label_col,pc1_col='pca_1',pc2_col='pca_2',var_explained=(0.0, 0.0),
+                      title='2D PCA Projection of Clusters',figsize=(12, 8),point_size=30,alpha=0.6
+                      ):
+    """
+    Plots a 2D PCA projection with cluster labels and centroids.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing PCA components and cluster labels.
+    label_col : str
+        Column name with cluster labels.
+    pc1_col : str, default='pca_1'
+        Column name for first principal component.
+    pc2_col : str, default='pca_2'
+        Column name for second principal component.
+    var_explained : tuple, default=(0.0, 0.0)
+        Explained variance for PC1 and PC2 (e.g. (0.42, 0.21)).
+    title : str
+        Plot title.
+    figsize : tuple
+        Figure size.
+    point_size : int
+        Size of scatter points.
+    alpha : float
+        Transparency of points.
+    """
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    labels = sorted(df[label_col].unique())
+    colors = cm.tab10(np.linspace(0, 1, max(len(labels), 10)))
+
+    # Plot points by cluster
+    for label in labels:
+        cluster_data = df[df[label_col] == label]
+        ax.scatter(
+            cluster_data[pc1_col],
+            cluster_data[pc2_col],
+            c='none',
+            edgecolors=[colors[label]],
+            alpha=alpha,
+            s=point_size,
+            label=f'Cluster {label}'
+        )
+
+    # Plot centroids
+    for label in labels:
+        cluster_data = df[df[label_col] == label]
+        centroid_x = cluster_data[pc1_col].mean()
+        centroid_y = cluster_data[pc2_col].mean()
+
+        ax.scatter(
+            centroid_x,
+            centroid_y,
+            c='black',
+            marker='X',
+            s=200,
+            edgecolors=colors[label],
+            linewidths=1,
+            zorder=10
+        )
+
+        ax.annotate(
+            f'C{label}',
+            (centroid_x + 0.15, centroid_y + 0.15),
+            fontsize=14,
+            weight='bold',
+            ha='center',
+            va='center',
+            zorder=20
+        )
+
+    # Labels & formatting
+    ax.set_xlabel(f'PC1 ({var_explained[0]:.1%} variance)', fontsize=12)
+    ax.set_ylabel(f'PC2 ({var_explained[1]:.1%} variance)', fontsize=12)
+    ax.set_title(title, fontsize=14, weight='bold')
+    ax.legend(loc='best', framealpha=1, title='Segments',
+              fontsize=10, markerscale=1.5)
+    ax.grid(True, alpha=0.3)
+    ax.set_aspect(1)
+
+    plt.tight_layout()
+    plt.show()
