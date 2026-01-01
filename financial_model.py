@@ -10,9 +10,8 @@ df_fin = df_fin.dropna(subset=['merged_labels']) # remove the outliers that were
 
 df_fin['merged_labels'] = df_fin['merged_labels'].astype(int) 
 
-# ==============================================================================
 # 1. FINANCIAL PROFILING DEFINITION
-# ==============================================================================
+
 
 def get_financial_profile(cluster_id):
     """
@@ -83,10 +82,7 @@ print("\n--- Financial Estimates by Cluster ---")
 summary_table = df_fin.groupby('merged_labels')[['Annual_Revenue', 'Annual_Profit', 'CLV']].mean()
 print(summary_table.round(2))
 
-
-# ==============================================================================
 # 2. ROI ANALYSIS (CAMPAIGN SIMULATION)
-# ==============================================================================
 
 # Scenario: Marketing Campaign targeting a 15% Lift in Revenue
 LIFT = 0.15
@@ -110,7 +106,7 @@ print(roi_analysis.round(2))
 
 
 # ==============================================================================
-# 3. VISUALIZATIONS (FOR THE REPORT)
+# 3. VISUALIZATIONS
 # ==============================================================================
 
 sns.set_style("whitegrid")
@@ -120,19 +116,20 @@ fig, axes = plt.subplots(1, 3, figsize=(20, 6))
 sns.barplot(x=summary_table.index, y='CLV', data=summary_table, ax=axes[0], palette='viridis')
 axes[0].set_title('CLV by Segment', fontsize=14)
 axes[0].set_ylabel('Avg CLV (€)')
-axes[0].set_xlabel('Cluster (0=Season, 1=Emergent, 2=Core, 3=Drift, 4=Loyal)')
+axes[0].set_xlabel('Clusters (0=Season, 1=Emergent, 2=Core, 3=Drift, 4=Loyal)')
 
 # --- PLOT 2: Campaign ROI ---
 # Color logic: Red for negative ROI, Green for positive
 colors = ['red' if x < 0 else 'green' for x in roi_analysis['ROI (%)']]
 sns.barplot(x=roi_analysis.index, y='ROI (%)', data=roi_analysis, ax=axes[1], palette=colors)
 axes[1].set_title('Projected ROI of Marketing Campaign', fontsize=14)
+axes[1].set_xlabel('Clusters (0=Season, 1=Emergent, 2=Core, 3=Drift, 4=Loyal)')
 axes[1].set_ylabel('ROI (%)')
 axes[1].axhline(0, color='black', linestyle='--') # Break-even line
 
-# --- PLOT 3: Investment Timeline (Focus on Core Flyers - Cluster 2) ---
-# We focus on Cluster 2 ("Core Flyers") as the financial engine
-target_cluster = 2 
+# --- PLOT 3: Investment Timeline---
+# We choose Cluster 2 (Core Flyers) for detailed timeline
+target_cluster = 2
 
 if target_cluster in roi_analysis.index:
     total_investment = roi_analysis.loc[target_cluster, 'Mkt_Cost']
@@ -160,10 +157,59 @@ if target_cluster in roi_analysis.index:
     axes[2].fill_between(months, 0, cash_flow, where=[c > 0 for c in cash_flow], color='green', alpha=0.1)
     axes[2].fill_between(months, 0, cash_flow, where=[c < 0 for c in cash_flow], color='red', alpha=0.1)
 
-# ==============================================================================
-# 4. GLOBAL COST-BENEFIT ANALYSIS (TOTAL STRATEGY)
-# ==============================================================================
+# --- PLOT 4: GLOBAL Investment Timeline---
 
+total_initial_investment = roi_analysis['Mkt_Cost'].sum()
+total_annual_profit_gain = roi_analysis['Profit_Gain'].sum()
+monthly_profit_gain = total_annual_profit_gain / 12  
+
+months = np.arange(0, 13) 
+cumulative_return = []
+
+for m in months:
+    if m == 0:
+        
+        cumulative_return.append(-total_initial_investment)
+    else:
+        current_val = -total_initial_investment + (monthly_profit_gain * m)
+        cumulative_return.append(current_val)
+
+break_even_month = total_initial_investment / monthly_profit_gain
+
+plt.figure(figsize=(10, 6))
+
+#principal line
+plt.plot(months, cumulative_return, marker='o', linewidth=3, color='#2E86C1', label='Cumulative Net Return')
+
+#break-even line
+plt.axhline(0, color='black', linestyle='--', linewidth=1.5)
+
+#red and green shading
+plt.fill_between(months, cumulative_return, 0, where=(np.array(cumulative_return) < 0), 
+                 interpolate=True, color='red', alpha=0.1, label='Investment Recovery Phase')
+plt.fill_between(months, cumulative_return, 0, where=(np.array(cumulative_return) >= 0), 
+                 interpolate=True, color='green', alpha=0.1, label='Profit Phase')
+
+#break-even point configuration
+plt.scatter(break_even_month, 0, color='gold', s=150, zorder=5, edgecolors='black', label='Break-even Point')
+plt.annotate(f'Break-even:\nMonth {break_even_month:.1f}', 
+             xy=(break_even_month, 0), xytext=(break_even_month + 1, -total_initial_investment/4),
+             arrowprops=dict(facecolor='black', shrink=0.05))
+
+plt.title(f'Global Strategy Investment Timeline (1 Year Projection)\nROI: {((total_annual_profit_gain - total_initial_investment)/total_initial_investment)*100:.1f}%', fontsize=14, fontweight='bold')
+plt.xlabel('Months after Campaign Launch', fontsize=12)
+plt.ylabel('Cumulative Net Profit (€)', fontsize=12)
+plt.xticks(months)
+plt.grid(True, alpha=0.3)
+plt.legend(loc='upper left')
+
+current_values = plt.gca().get_yticks()
+plt.gca().set_yticklabels(['{:,.0f}€'.format(x) for x in current_values])
+
+plt.tight_layout()
+plt.show()
+
+# 4. GLOBAL COST-BENEFIT ANALYSIS (TOTAL STRATEGY)
 
 total_investment = roi_analysis['Mkt_Cost'].sum()
 total_gain = roi_analysis['Profit_Gain'].sum()
@@ -173,11 +219,9 @@ global_roi = (net_benefit / total_investment) * 100
 print("\n================================================")
 print("   FINAL COST-BENEFIT ANALYSIS (GLOBAL)   ")
 print("================================================")
-print(f"Total Investment Required:   € {total_investment:,.2f}")
-print(f"Total Projected Profit Gain: € {total_gain:,.2f}")
-print(f"Net Benefit (Profit - Cost): € {net_benefit:,.2f}")
+print(f"Total Investment Required:    {total_investment:,.2f}€")
+print(f"Total Projected Profit Gain:  {total_gain:,.2f}€")
+print(f"Net Benefit (Profit - Cost):  {net_benefit:,.2f}€")
 print(f"Global Project ROI:          {global_roi:.2f}%")
 print("================================================")
 
-plt.tight_layout()
-plt.show()
