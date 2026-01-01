@@ -1004,3 +1004,74 @@ def r2_variables(df, labels):
     sst_vars = get_ss_variables(df)
     ssw_vars = np.sum(df.groupby(labels).apply(get_ss_variables))
     return 1 - ssw_vars/sst_vars
+
+def assign_segment(rfm):
+    r, f, m = int(rfm[0]), int(rfm[1]), int(rfm[2])
+
+    if r == 5 and f == 5 and m == 5:
+        return "High-value Loyal customers"
+
+    if f == 5 and not (r == 5 and m == 5):
+        return "Loyal Frequent customers"
+
+    if m == 5 and not (r == 5 and f == 5):
+        return "Big spenders"
+
+    if r == 5 and m == 5 and f in [1, 2]:
+        return "Potential Loyalists"
+
+    if r == 5 and f == 1 and m in [1, 2]:
+        return "New customers"
+
+    if (r in [1, 2]) and f == 5 and m == 5:
+        return "At Risk customers"
+
+    if r == 1 and f == 5 and m == 5:
+        return "Lost customers"
+
+    if r == 1 and f == 1 and m == 1:
+        return "Lost Cheap customers"
+
+    return "Others"
+
+
+def create_rfm_quantiles(df, recency, frequency, monetary, rec_ascending=True, freq_ascending=False, mon_ascending=False):
+    rfm_df = df.copy()
+
+    rfm_df["R_quintile"] = pd.qcut(rfm_df[recency].rank(method="first", ascending = rec_ascending),
+                                   q=5, labels=[1,2,3,4,5]
+                                   ).astype(int)
+    rfm_df["F_quintile"] = pd.qcut(rfm_df[frequency].rank(method="first", ascending = freq_ascending),
+                                   q=5, labels=[1,2,3,4,5]
+                                   ).astype(int)
+    rfm_df["M_quintile"] = pd.qcut(rfm_df[monetary].rank(method="first", ascending = mon_ascending),
+                                   q=5, labels=[1,2,3,4,5]
+                                   ).astype(int)
+
+    rfm_df["RFM_score"] = (rfm_df["R_quintile"].astype(str) + rfm_df["F_quintile"].astype(str) + rfm_df["M_quintile"].astype(str))
+
+    return rfm_df
+
+
+def find_group_outliers(df, group_col, value_col, k=1.5):
+    outlier_idx = []
+    for name, g in df.groupby(group_col):
+        q1 = g[value_col].quantile(0.25)
+        q3 = g[value_col].quantile(0.75)
+        iqr = q3 - q1
+        lower = q1 - k * iqr
+        upper = q3 + k * iqr
+        mask = (g[value_col] < lower) | (g[value_col] > upper)
+        outlier_idx.extend(g[mask].index.tolist())
+    return df.loc[outlier_idx]
+
+def outliers_for_all(df, cat_cols, value_cols=("Customer Lifetime Value", "Income"), k=1.5):
+    results = {}
+    for val in value_cols:
+        print(f"\n--- {val} ---")
+        # compute outliers per categorical column
+        for col in cat_cols:
+            out = find_group_outliers(df, col, val, k=k)
+            results[(col, val)] = out
+            print(f"{col}: {len(out)} outliers")
+    return results
