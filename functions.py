@@ -124,8 +124,7 @@ def get_r2_scores(df, feats, clusterer, min_k=1, max_k=9):
 
 def visualize_silhouette_graf(df, range_clusters=[2, 3, 4, 5, 6]):
     
-    # --- SETUP THE GRID ---
-    # 2 Rows, 5 Columns = 10 slots available
+    #SETUP THE GRID 
     n_rows = 2
     n_cols = 5
     
@@ -136,7 +135,6 @@ def visualize_silhouette_graf(df, range_clusters=[2, 3, 4, 5, 6]):
     # Flatten allows us to iterate through the grid as a simple list (0 to 9)
     axes_flat = axes.flatten() 
 
-    # --- LOOP THROUGH CLUSTERS ---
     for i, nclus in enumerate(range_clusters):
         
         # Safety check: stop if we have more clusters than plots
@@ -180,7 +178,7 @@ def visualize_silhouette_graf(df, range_clusters=[2, 3, 4, 5, 6]):
             # Compute the new y_lower for next plot
             y_lower = y_upper + 10 
 
-        # 4. Titles and Labels
+        # Titles and Labels
         ax.set_title(f"K = {nclus} (Avg: {silhouette_avg:.2f})", fontsize=11)
         ax.set_xlabel("Silhouette Coeff")
         ax.set_ylabel("Cluster Label")
@@ -191,7 +189,7 @@ def visualize_silhouette_graf(df, range_clusters=[2, 3, 4, 5, 6]):
         # Remove y-ticks for cleaner look
         ax.set_yticks([]) 
 
-    # --- CLEANUP ---
+    # CLEANUP
     # Hide any empty subplots (if you have fewer clusters than grid slots)
     for k in range(len(range_clusters), len(axes_flat)):
         axes_flat[k].axis('off')
@@ -209,16 +207,16 @@ def plot_k_distance(df, features, k=None):
     if k is None:
         k = 2 * len(features)
     
-    # 1. Fit Nearest Neighbors
+    #  Fit Nearest Neighbors
     neighbors = NearestNeighbors(n_neighbors=k)
     neighbors_fit = neighbors.fit(data)
     distances, indices = neighbors_fit.kneighbors(data)
     
-    # 2. Sort distances
+    #  Sort distances
     # We take the distance to the k-th neighbor (column k-1)
     sorted_distances = np.sort(distances[:, k-1], axis=0)
     
-    # 3. Plot
+    #  Plot
     plt.figure(figsize=(10, 6))
     plt.plot(sorted_distances, color='darkgreen', linewidth=2)
     plt.title(f"k-Distance Plot (k={k}) for EPS estimation")
@@ -231,38 +229,34 @@ def plot_k_distance(df, features, k=None):
 
 def get_dbscan(df, features, eps=1.8, min_samples=7):
     
-    # 1. Executar o Modelo
+    # Execute the DBSCAN model
     dbscan = DBSCAN(eps=eps, min_samples=min_samples, n_jobs=-1)
     labels = dbscan.fit_predict(df[features])
     
-    # 2. Calcular Estatísticas
-    # Contar quantos clientes há em cada label
+    # calculate statistics
+    # count how many customers in each cluster
     distribution = pd.Series(labels).value_counts().sort_index()
     
-    # O número de clusters é o total de labels únicos, ignorando o -1 (ruído)
+    # the number of clusters is the number of unique labels, excluding -1 (noise)
     n_clusters = len(distribution) - (1 if -1 in distribution.index else 0)
     
     n_noise = distribution.get(-1, 0)
     perc_noise = (n_noise / len(df)) * 100
     
-    # 3. Print para leitura imediata
     print(f"Clusters found: {n_clusters}")
     print(f"Noise: {n_noise} customers ({perc_noise:.2f}%)")
     print("Cluster Distribution:")
     print(distribution)
     
-    # 4. Calcular R2 (Opcional, mas útil)
+    # Calculate R2
     try:
         temp_df = df[features].copy()
         temp_df['labels_temp'] = labels
-        # Se tiveres a tua função 'func' importada:
         r2 = get_rsq(temp_df, features, 'labels_temp')
         print(f"R2 Score: {r2:.4f}")
     except:
         pass
         
-    
-    # RETORNAR AS 3 COISAS QUE PEDISTE
     return labels, n_clusters, distribution
 
 def get_hdbscan(df, features, min_cluster_size=200, min_samples=None, selection_method='eom'):
@@ -272,25 +266,22 @@ def get_hdbscan(df, features, min_cluster_size=200, min_samples=None, selection_
     2. Número de Clusters (Int)
     3. Distribuição dos Clientes (Series)
     """
-    
-    # Se min_samples não for definido, por defeito o HDBSCAN usa igual ao min_cluster_size, 
-    # mas aqui deixamos explícito como None para ele decidir ou o utilizador definir
-    
-    # 1. Executar o Modelo
+
+    # execute HDBSCAN
     hdb = HDBSCAN(
         min_cluster_size=min_cluster_size,
         min_samples=min_samples,
         metric='euclidean',
         cluster_selection_method=selection_method,
-        n_jobs=-1 # Usa todos os processadores
+        n_jobs=-1 
     )
     
     labels = hdb.fit_predict(df[features])
     
-    # 2. Calcular Estatísticas
+    # calculate statistics
     distribution = pd.Series(labels).value_counts().sort_index()
     
-    # O número de clusters ignora o label -1 (ruído)
+    #the number of clusters is the number of unique labels, excluding -1 (noise)
     n_clusters = len(distribution) - (1 if -1 in distribution.index else 0)
     
     n_noise = distribution.get(-1, 0)
@@ -301,12 +292,11 @@ def get_hdbscan(df, features, min_cluster_size=200, min_samples=None, selection_
     print("Cluster distribution:")
     print(distribution)
     
-    # 3. Calcular R2
+    # calculate R2
     try:
         temp_df = df.copy()
         temp_df['labels_temp'] = labels
         
-        # Chama a tua função auxiliar get_rsq (que já deve estar neste ficheiro)
         r2 = get_rsq(temp_df, features, 'labels_temp')
         print(f"R2 Score: {r2:.4f}")
     except Exception as e:
@@ -381,18 +371,18 @@ def fit_gmm_segmentation(df, features, k, cov_type='full', rsq_func=None):
     - gmm_model: The fitted model object
     - df_result: Dataframe with a new 'gmm_labels' column
     """
-    # 1. Initialize and Fit
+    # Initialize and Fit
     gmm = GaussianMixture(n_components=k, covariance_type=cov_type, 
                           n_init=10, init_params='kmeans', random_state=1)
     
-    # 2. Predict Labels
+    # Predict Labels
     labels = gmm.fit_predict(df[features])
     
-    # 3. Create Result Dataframe
+    # Create Result Dataframe
     df_result = df.copy()
     df_result['gmm_labels'] = labels
     
-    # 4. Calculate R^2 
+    # Calculate R^2 
     r2 = rsq_func(df_result, features, 'gmm_labels')
     print(f"GMM ({cov_type}, k={k}) R² score: {r2:.4f}")
     
@@ -412,24 +402,23 @@ def analyze_gmm_uncertainty(model, df, features, threshold):
     - features: List of feature columns used for the model
     - threshold: Probability cutoff for 'certain' customers 
     """
-    # 1. Get Probabilities
+    # Get Probabilities
     probabilities = model.predict_proba(df[features])
     max_probs = probabilities.max(axis=1)
     
-    # 2. Filter Certain vs Uncertain
+    # Filter Certain vs Uncertain
     certain_mask = max_probs >= threshold
     uncertain_mask = ~certain_mask
     
     n_certain = certain_mask.sum()
     n_uncertain = uncertain_mask.sum()
     
-    # 3. Print Statistics
+    # Print Statistics
     print(f"\n--- GMM Probability Analysis ---")
     print(f"Threshold: {threshold:.0%}")
     print(f"Clear assignments: {n_certain:,} customers")
     print(f"Uncertain assignments: {n_uncertain:,} customers ({n_uncertain/len(df):.1%})")
     
-    # 4. Plot Distribution
     plt.figure(figsize=(10, 6))
     plt.hist(max_probs, bins=50, edgecolor='black', alpha=0.7, color='#4c72b0')
     plt.axvline(x=threshold, color='red', linestyle='--', linewidth=2, 
@@ -457,7 +446,7 @@ def get_model_metrics(df, labels, model_name, perspective):
     - dict: A dictionary containing the metrics.
     """
     
-    # 1. Handle Noise (DBSCAN/HDBSCAN)
+    # Handle Noise (DBSCAN/HDBSCAN)
     # We filter out noise (-1) so metrics represent the validity of actual clusters
     mask = labels != -1
     if mask.sum() < len(df) and mask.sum() > 0:
@@ -473,12 +462,12 @@ def get_model_metrics(df, labels, model_name, perspective):
         print(f"Skipping {model_name}: Less than 2 clusters found.")
         return None
 
-    # 2. Calculate Standard Scikit-Learn Metrics
+    # Calculate Standard Scikit-Learn Metrics
     sil = silhouette_score(X_metrics, labels_metrics)
     db = davies_bouldin_score(X_metrics, labels_metrics)
     ch = calinski_harabasz_score(X_metrics, labels_metrics)
     
-    # 3. Calculate R^2 
+    # Calculate R^2 
     # We use your existing get_rsq function. 
     # We must attach labels temporarily because get_rsq expects a column name.
     X_metrics['temp_labels'] = labels_metrics
@@ -533,10 +522,10 @@ def plot_hexagons(som_matrix, som, ax, label='', cmap=None):
     # Visual adjustments
     ax.set_title(label, fontsize=10)
     
-    ax.set_xlim(-1, som_x + 1)  # Adiciona +1 ou +2
+    ax.set_xlim(-1, som_x + 1)  
     ax.set_ylim(-1, som_y + 1)
     
-    ax.set_aspect('equal') # Isto é crucial para não ficarem "ovais"
+    ax.set_aspect('equal') # this is crucial for hexagons to look right
     ax.axis('off')
     # Add Colorbar (Small bar on the right)
     divider = make_axes_locatable(ax)
@@ -561,11 +550,11 @@ def plot_som_diagnostics(som, data, figsize=(16, 7)):
     - figsize: Tuple for figure dimensions.
     """
     
-    # 1. Calculate the Matrices
+    # Calculate the Matrices
     frequencies = som.activation_response(data) # Hits map
     u_matrix = som.distance_map()               # U-Matrix
     
-    # 2. Initialize Figure
+    # Initialize Figure
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
     
     # --- LEFT PLOT: HITS MAP (Cluster Density) ---
@@ -603,19 +592,19 @@ def run_som_kmeans(som, data_values, n_clusters=4):
     - matrix_km: The grid of cluster labels (for plotting)
     """
     
-    # 1. Prepare SOM weights
+    # Prepare SOM weights
     weights = som.get_weights()
     x_dim, y_dim, n_features = weights.shape
     weights_flat = weights.reshape(-1, n_features)
     
-    # 2. Run K-Means
+    # Run K-Means
     kmeans = KMeans(n_clusters=n_clusters, n_init=10, random_state=42)
     labels_km = kmeans.fit_predict(weights_flat)
     
-    # 3. Reshape for visualization
+    # Reshape for visualization
     matrix_km = labels_km.reshape(x_dim, y_dim)
     
-    # 4. Plot the K-Means Map
+    # Plot the K-Means Map
     fig, ax = plt.subplots(figsize=(8, 7))
     plot_hexagons(
         matrix_km, 
@@ -626,7 +615,7 @@ def run_som_kmeans(som, data_values, n_clusters=4):
     )
     plt.show()
     
-    # 5. Assign labels to original customers
+    # Assign labels to original customers
     # We find the winner neuron for each customer and assign its cluster label
     final_labels = []
     for x in data_values:
@@ -639,11 +628,10 @@ def run_som_kmeans(som, data_values, n_clusters=4):
 
 def run_som_hierarchical(som, data_values, n_clusters=5, cmap=cm.Spectral_r, figsize=(20, 8)):
     """
-    Executa o clustering hierárquico nos pesos do SOM e mostra
-    o Dendrograma e o Mapa resultante lado a lado.
+    Executes Hierarchical Clustering on SOM weights and visualizes the dendrogram and clustered map.
     """
     
-    # 1. Preparar os pesos do SOM
+    # Prepare SOM weights
     weights = som.get_weights()
     x_dim, y_dim, n_features = weights.shape
     weights_flat = weights.reshape(-1, n_features)
@@ -656,18 +644,17 @@ def run_som_hierarchical(som, data_values, n_clusters=5, cmap=cm.Spectral_r, fig
     else:
         cut_height = 0 # Default fallback
     
-    # 2. Criar a figura com 2 subplots lado a lado
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
     
-    # --- GRÁFICO DA ESQUERDA: DENDROGRAMA ---
-    # Calcular a matriz de ligação (linkage)
+    # --- LEFT PLOT: DENDROGRAM ---
+    # Calculate the linkage matrix
     linkage_matrix = sch.linkage(weights_flat, method='ward')
     
-    # Definir o eixo atual como o da esquerda (ax1) para o dendrograma desenhar lá
+    # Set the current axis to the left subplot (ax1) for dendrogram drawing
     plt.sca(ax1) 
-    
-    # Desenhar o dendrograma
-    # no_labels=True esconde os números dos neurónios no eixo X para ficar mais limpo
+
+    # Draw the dendrogram
+    # no_labels=True hides the neuron numbers on the X-axis to keep it cleaner
     dend = sch.dendrogram(
         linkage_matrix, 
         no_labels=True, 
@@ -680,20 +667,18 @@ def run_som_hierarchical(som, data_values, n_clusters=5, cmap=cm.Spectral_r, fig
     ax1.set_ylabel('Euclidean Distance')
     ax1.grid(axis='y', linestyle='--', alpha=0.7)
 
-    # Isto é uma aproximação visual baseada na altura das últimas fusões
     if n_clusters > 1:
-        # Encontrar as alturas das últimas k-1 fusões para estimar a linha de corte
         last_merges = linkage_matrix[-(n_clusters-1):, 2]
         cut_height = (last_merges[0] + linkage_matrix[-n_clusters, 2]) / 2
         ax1.axhline(y=cut_height, c='grey', lw=2, linestyle='--', label=f'Approx. Cut for k={n_clusters}')
         ax1.legend()
 
-    # --- GRÁFICO DA DIREITA: MAPA HIERÁRQUICO ---
+    # --- RIGHT PLOT: HIERARCHICAL MAP ---
     hc = AgglomerativeClustering(n_clusters=n_clusters, linkage='ward')
     labels_hc = hc.fit_predict(weights_flat)
     matrix_hc = labels_hc.reshape(x_dim, y_dim)
     
-    # Usar a função plot_hexagons no eixo da direita (ax2)
+    # Use the plot_hexagons function on the right subplot (ax2)
     plot_hexagons(
         matrix_hc, 
         som, 
@@ -738,7 +723,6 @@ def analyze_feature(feature: pd.Series, feature_name: str):
 
     spotify_green = '#1DB954'
 
-    # ---- Plots ----
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
     # Histograma + KDE
@@ -770,24 +754,21 @@ def calculate_seasonality(df):
 
     df['Season'] = df['Month'].apply(get_season)
 
-    # 2. Calcular Ratios por Estação (Summer_Ratio, etc.)
+    # Calculater the ratios per season
     season_counts = df.pivot_table(index='Loyalty#', columns='Season', values='NumFlights', aggfunc='sum', fill_value=0)
     total = season_counts.sum(axis=1).replace(0, 1) # Evitar divisão por zero
     season_ratios = season_counts.div(total, axis=0).add_suffix('_Ratio').reset_index()
 
-    # 3. Índice de Sazonalidade (Desvio Padrão dos meses)
     monthly = df.pivot_table(index='Loyalty#', columns='Month', values='NumFlights', aggfunc='sum', fill_value=0)
-    # Se desvio padrão é alto, cliente é muito sazonal
+        # if std is high compared to mean, high seasonality
     season_index = (monthly.std(axis=1) / (monthly.mean(axis=1) + 0.001)).reset_index(name='Seasonality_Index')
 
-    # Juntar as duas partes de sazonalidade
     return season_ratios.merge(season_index, on='Loyalty#')
 
 def calculate_trend(df):
-    # Função auxiliar para calcular declive (slope)
+    # auxiliar function to calculate slope
     def get_slope(series):
         if len(series) < 2: return 0
-        # Cria uma linha de tendência (y=mx+b) e devolve o m (slope)
         return linregress(np.arange(len(series)), series.values)[0]
 
     df_sorted = df.sort_values(['Loyalty#', 'YearMonthDate'])
@@ -825,7 +806,6 @@ def plot_pca_variance(data,features,chosen_components=2,
     explained_variance = pca_full.explained_variance_ratio_
     cumulative_variance = np.cumsum(explained_variance)
 
-    # Create plot
     fig, ax = plt.subplots(figsize=figsize)
 
     # Individual variance
@@ -1035,22 +1015,47 @@ def assign_segment(rfm):
     return "Others"
 
 
-def create_rfm_quantiles(df, recency, frequency, monetary, rec_ascending=True, freq_ascending=False, mon_ascending=False):
+def create_rfm_quantiles(df, recency, frequency, monetary,
+                          rec_ascending=False, freq_ascending=True, mon_ascending=True):
+
     rfm_df = df.copy()
 
-    rfm_df["R_quintile"] = pd.qcut(rfm_df[recency].rank(method="first", ascending = rec_ascending),
-                                   q=5, labels=[1,2,3,4,5]
-                                   ).astype(int)
-    rfm_df["F_quintile"] = pd.qcut(rfm_df[frequency].rank(method="first", ascending = freq_ascending),
-                                   q=5, labels=[1,2,3,4,5]
-                                   ).astype(int)
-    rfm_df["M_quintile"] = pd.qcut(rfm_df[monetary].rank(method="first", ascending = mon_ascending),
-                                   q=5, labels=[1,2,3,4,5]
-                                   ).astype(int)
+    never_flew = rfm_df[frequency] == 0
 
-    rfm_df["RFM_score"] = (rfm_df["R_quintile"].astype(str) + rfm_df["F_quintile"].astype(str) + rfm_df["M_quintile"].astype(str))
+    # Recency: compute only for customers who flew
+    rfm_df.loc[~never_flew, "R_quintile"] = pd.qcut(
+        rfm_df.loc[~never_flew, recency]
+        .rank(method="first", ascending=rec_ascending),
+        q=5, labels=[1,2,3,4,5]
+    ).astype(int)
+
+    # Force never-flew customers to worst recency
+    rfm_df.loc[never_flew, "R_quintile"] = 1
+
+    # Frequency
+    rfm_df["F_quintile"] = pd.qcut(
+        rfm_df[frequency].rank(method="first", ascending=freq_ascending),
+        q=5, labels=[1,2,3,4,5]
+    ).astype(int)
+
+    # Monetary
+    rfm_df["M_quintile"] = pd.qcut(
+        rfm_df[monetary].rank(method="first", ascending=mon_ascending),
+        q=5, labels=[1,2,3,4,5]
+    ).astype(int)
+
+    rfm_df[["R_quintile", "F_quintile", "M_quintile"]] = (
+    rfm_df[["R_quintile", "F_quintile", "M_quintile"]].astype(int)
+    )
+
+    rfm_df["RFM_score"] = (
+        rfm_df["R_quintile"].astype(str) +
+        rfm_df["F_quintile"].astype(str) +
+        rfm_df["M_quintile"].astype(str)
+    )
 
     return rfm_df
+
 
 
 def find_group_outliers(df, group_col, value_col, k=1.5):
